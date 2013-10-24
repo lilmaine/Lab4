@@ -122,7 +122,7 @@ void SET_SS_LO() {
 	P1OUT &= BIT0;
 }
 
-void LCDclr() {
+void LCDCLR() {
 	writeCommandByte(1);
 }
 
@@ -148,6 +148,43 @@ void writeString(char * string) {
 		LCD_write_8(string[i]); //call wrt8 bit by bit
 		delayMilli();
 	}
-
 }
 
+void scrollString(char * string1, char * string2){
+	int i, counter1 = 0, counter2 = 0;
+
+	while (1){
+		cursorToLineOne();
+		for (i = 0; i <8; i++){
+			writeDataByte(string1[(i+counter1)]);
+			if (counter1 + i >= 28){
+				counter1 = 0;
+			}
+		}
+		cursorToLineTwo();
+		for (i = 0; i < 8; i++){
+			writeDataByte(string2[(i+counter2)]);
+			if (counter2 + i >= strLength(string2)){
+				counter2 = 0;
+			}
+		}
+		counter1++;
+		counter2++;
+		_delay_cycles(665544);
+		LCDCLR;
+
+
+
+	}
+}
+
+
+int strLength(char *s)
+{
+   int c = 0;
+
+   while(*(s+c))
+      c++;
+
+   return c;
+}
