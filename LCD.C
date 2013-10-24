@@ -174,9 +174,6 @@ void scrollString(char * string1, char * string2){
 		counter2++;
 		_delay_cycles(665544);
 		LCDCLR;
-
-
-
 	}
 }
 
@@ -198,3 +195,20 @@ void delayMicro(){
 void delayMilli(){
 	_delay_cycles(0x025F);
 }
+
+
+void cursorToLineOne(){
+	wirteCommandByte(0x80);
+}
+
+void cursorToLineTwo(){
+	wirteCommandByte(0xC0);
+}
+
+
+
+
+
+
+
+
