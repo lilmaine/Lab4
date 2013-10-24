@@ -15,6 +15,8 @@ void writeCommandByte(char commandByte);
 void SPI_send(char byteToSend);
 void LCD_write_8(char byteToSend);
 void LCD_write_4(char byteToSend);
+void delayMilli();
+void delayMicro();
 
 void LCDinit() {
 	writeCommandNibble(0x03);
@@ -187,4 +189,12 @@ int strLength(char *s)
       c++;
 
    return c;
+}
+
+void delayMicro(){
+	_delay_cycles(9);
+}
+
+void delayMilli(){
+	_delay_cycles(0x025F);
 }
