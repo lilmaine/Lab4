@@ -1,72 +1,188 @@
 /*
- * LCD.C
+ * LCD.c
  *
- *  Created on: Oct 22, 2013
- *      Author: C15Tramaine.Barnett
  */
-#include <msp430g2553.h>
-#include "lcd.h"
+
+#include <msp430.h>
+#include "LCD.h"
 #define RS_MASK 0x40
-static int LCDCON;
-static int LCDSEND;
+
+char LCDcon = 0;
+
+void initSPI() { //Initializes the SPI subsytem.
+
+	UCB0CTL1 |= UCSWRST;
+	UCB0CTL0 |= UCCKPH | UCMSB | UCMST | UCSYNC;
+	UCB0CTL1 |= UCSSEL1;
+
+	P1DIR |= BIT0;
+
+	P1SEL |= BIT5;
+	P1SEL2 |= BIT5;
+
+	P1SEL |= BIT7;
+	P1SEL2 |= BIT7;
+
+	P1SEL |= BIT6;
+	P1SEL2 |= BIT6;
+
+	UCB0CTL1 &= ~UCSWRST;
+}
 
 void writeCommandNibble(char commandNibble);
 void writeCommandByte(char commandByte);
 void SPI_send(char byteToSend);
-void LCD_write_8(char byteToSend);
-void LCD_write_4(char byteToSend);
-void delayMilli();
 void delayMicro();
 
 void LCDinit() {
 	writeCommandNibble(0x03);
-
 	writeCommandNibble(0x03);
-
 	writeCommandNibble(0x03);
-
 	writeCommandNibble(0x02);
 
 	writeCommandByte(0x28);
-
 	writeCommandByte(0x0C);
-
 	writeCommandByte(0x01);
-
 	writeCommandByte(0x06);
-
 	writeCommandByte(0x01);
-
 	writeCommandByte(0x02);
 
 	SPI_send(0);
 	delayMicro();
 }
 
+void LCDCLR() {
+	writeCommandByte(1);
+}
+
+void LCD_write_8(char byteToSend);
+void delayMilli();
+
+void writeDataByte(char dataByte) {
+	LCDcon |= RS_MASK;
+	LCD_write_8(dataByte);
+	delayMilli();
+}
+
+void writeString(char * string) {
+	int i = 0;
+	LCDcon |= RS_MASK;
+	for (i = 0; i < 8; i++) {
+		LCD_write_8(string[i]);
+		delayMilli();
+	}
+}
+
+void rotateString(char *string1, char *string2, int length) {
+	unsigned int i = 0;
+
+	char *count1 = string1, *count2 = string2;
+
+	while (1) {
+		updateCursor1();
+		char *currentChar = count1;
+
+		for (i = 0; i < 8; i++) {
+			writeDataByte(*currentChar);
+
+			currentChar++;
+
+			if (*currentChar == 0)
+				currentChar = string1;
+		}
+		count1++;
+
+		if (*count1 == 0) {
+			count1 = string1;
+		}
+
+		updateCursor2();
+		char *currentChar2 = count2;
+		for (i = 0; i < 8; i++) {
+			writeDataByte(*currentChar2);
+
+			currentChar2++;
+
+			if (*currentChar2 == 0)
+				currentChar2 = string2;
+		}
+		count2++;
+
+		if (*count2 == 0) {
+			count2 = string2;
+		}
+
+		__delay_cycles(665544);
+
+		LCDCLR();
+	}
+}
+
+void SET_SS_HI() {
+
+	P1OUT |= BIT0;
+}
+
+void SET_SS_LO() {
+
+	P1OUT &= ~BIT0;
+}
+
+void delayMicro() {
+
+	__delay_cycles(0x09);
+}
+
+void delayMilli() {
+
+	__delay_cycles(0x025F);
+}
+
+void LCD_write_4(char sendByte);
+
 void writeCommandNibble(char commandNibble) {
-	LCDCON &= ~RS_MASK;
+	LCDcon &= ~RS_MASK;
 	LCD_write_4(commandNibble);
 	delayMilli();
 }
 
 void writeCommandByte(char commandByte) {
-	LCDCON &= ~RS_MASK;
+	LCDcon &= ~RS_MASK;
 	LCD_write_8(commandByte);
 	delayMilli();
 }
 
-void writeDataByte(char dataByte) {
-	LCDCON |= RS_MASK;
-	LCD_write_8(dataByte);
-	delayMilli();
+void LCD_write_4(char sendByte) {
+
+	sendByte &= 0x0F;
+	sendByte |= LCDcon;
+	sendByte &= 0x7F;
+	SPI_send(sendByte);
+	delayMicro();
+	sendByte |= 0x80;
+	SPI_send(sendByte);
+	delayMicro();
+	sendByte &= 0x7F;
+	SPI_send(sendByte);
+	delayMicro();
 }
+
+void updateCursor1() {
+	writeCommandByte(0x80);
+}
+
+void updateCursor2() {
+	writeCommandByte(0xC0);
+}
+
+
 
 void LCD_write_8(char byteToSend) {
 	unsigned char sendByte = byteToSend;
 
 	sendByte &= 0xF0;
 
-	sendByte = sendByte >> 4;               // rotate to the right 4 times
+	sendByte = sendByte >> 4;               // >> = rotate right
 
 	LCD_write_4(sendByte);
 
@@ -78,137 +194,78 @@ void LCD_write_8(char byteToSend) {
 }
 
 void SPI_send(char byteToSend) {
-	char readByte;
+	volatile char readByte;
 
-	set_SS_lo();
+	SET_SS_LO();
 
 	UCB0TXBUF = byteToSend;
 
-	while (!(UCB0RXIFG & IFG2)) {
-		// wait until you've received a byte
+	while (!(UCB0RXIFG && IFG2)) {
+
 	}
 
 	readByte = UCB0RXBUF;
 
-	set_SS_hi();
+	SET_SS_HI();
 }
 
-void initSPI() {
+int btnPressed() {
 
-	UCB0CTL1 |= UCSWRST | UCSSEL1;
-	UCB0CTL0 |= UCCKPH | UCMSB | UCMST | UCSYNC;
-	UCB0CTL1 |= UCSSEL1;                       //selects clock to use
-	UCB0STAT |= UCLISTEN;                      //enables internal loopback
-
-	P1DIR |= BIT0;                                                   //For my SS
-
-	P1SEL |= BIT5;                            // make UCB0CLK available on P1.5
-	P1SEL2 |= BIT5;
-
-	P1SEL |= BIT7;                           // make UCB0SSIMO available on P1.7
-	P1SEL2 |= BIT7;
-
-	P1SEL |= BIT6;                           // make UCB0SSOMI available on P1.6
-	P1SEL2 |= BIT6;
-
-	UCB0CTL1 &= ~UCSWRST;                       //enable subsystem
-}
-
-void SET_SS_HI() {
-
-	P1OUT |= BIT0;
-}
-
-void SET_SS_LO() {
-
-	P1OUT &= BIT0;
-}
-
-void LCDCLR() {
-	writeCommandByte(1);
-}
-
-void LCD_write_4(char sendByte) {
-
-	sendByte &= 0x0f;                      // ensure upper half of byte is clear
-	sendByte |= LCDCON;                                 //set LCD control nibble
-	sendByte &= 0x7f;                                               //set E low
-	SPI_send(sendByte);
-	delayMicro();
-	sendByte |= 0x80;                                               //set E high
-	SPI_send(sendByte);
-	delayMicro();
-	sendByte &= 0x7f;                                               //set E low
-	SPI_send(sendByte);
-	delayMicro();
-}
-
-void writeString(char * string) {
-	LCDCON |= RS_MASK;
-	int i;
-	for (i = 0; i < 8 ; i++){
-		LCD_write_8(string[i]); //call wrt8 bit by bit
-		delayMilli();
-	}
-}
-
-void scrollString(char * string1, char * string2){
-	int i, counter1 = 0, counter2 = 0;
-
-	while (1){
-		cursorToLineOne();
-		for (i = 0; i <8; i++){
-			writeDataByte(string1[(i+counter1)]);
-			if (counter1 + i >= 28){
-				counter1 = 0;
-			}
+	int btnPress = 0;
+	while (btnPress == 0) {
+		if ((P1IN & BIT1)== 0){
+			btnPress = 1;
+			return btnPress;
 		}
-		cursorToLineTwo();
-		for (i = 0; i < 8; i++){
-			writeDataByte(string2[(i+counter2)]);
-			if (counter2 + i >= strLength(string2)){
-				counter2 = 0;
-			}
+
+		if ((P1IN & BIT2)== 0){
+			btnPress = 2;
+			return btnPress;
 		}
-		counter1++;
-		counter2++;
-		_delay_cycles(665544);
-		LCDCLR;
+
+		if ((P1IN & BIT3)== 0){
+			btnPress = 3;
+			return btnPress;
+		}
 	}
+	return btnPress;
 }
 
+void doWork(){
+    char * requiredMsg = "ECE382 is my favorite class! "; // minus the GR's
+    char * prompt = "Message?";
+    char * promptKey = "Press123";
 
-int strLength(char *s)
-{
-   int c = 0;
+    char * message1 = "Brave Gryffindor... "; // expecto patronum
+    int length1 = 23;
 
-   while(*(s+c))
-      c++;
+    char * message2 = "Sneaky Slytherin... ";
+    int length2 = 17;
 
-   return c;
+    char * message3 = "Nerdy Ravenclaw... ";
+    int length3 = 17;
+
+    updateCursor1();
+    writeString(prompt);
+
+
+    updateCursor2();
+    writeString(promptKey);
+
+    int buttonPushed = 0;
+
+    buttonPushed = btnPressed();
+
+
+    if (buttonPushed == 1) {
+            rotateString(requiredMsg, message1, length1);
+    }
+
+    if (buttonPushed == 2) {
+            rotateString(requiredMsg, message2, length2);
+    }
+
+    if (buttonPushed == 3) {
+            rotateString(requiredMsg, message3, length3);
+    }
 }
-
-void delayMicro(){
-	_delay_cycles(9);
-}
-
-void delayMilli(){
-	_delay_cycles(0x025F);
-}
-
-
-void cursorToLineOne(){
-	wirteCommandByte(0x80);
-}
-
-void cursorToLineTwo(){
-	wirteCommandByte(0xC0);
-}
-
-
-
-
-
-
-
-
